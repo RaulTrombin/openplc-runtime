@@ -51,14 +51,42 @@ jobs:
         run: go test -race -count=1 ./...
 
   webserver:
-    name: Webserver (pytest)
+    name: Webserver (pytest, Python ${{ matrix.python-version }})
+    # Temporary: ubuntu-latest (26.04) ships uutils coreutils; checking the suite on GNU coreutils.
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.1.0
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+
+      # Temporary: test_leftover_etherdog_is_killed copies `sleep`, which fails on multi-call coreutils.
+      - name: Runner diagnostics
+        run: |
+          echo "ImageOS=${ImageOS:-?} ImageVersion=${ImageVersion:-?} RUNNER_ARCH=${RUNNER_ARCH:-?}"
+          grep -E '^(PRETTY_NAME|VERSION_ID)=' /etc/os-release
+          uname -a
+          python --version || true
+          sleep_path="$(command -v sleep)"
+          echo "sleep: $sleep_path -> $(readlink -f "$sleep_path")"
+          ls -la "$sleep_path" "$(readlink -f "$sleep_path")"
+          file "$(readlink -f "$sleep_path")" || true
+          sleep --version | head -n 2 || true
+          dpkg -S "$(readlink -f "$sleep_path")" || true
+          dpkg -l | grep -iE 'coreutils|busybox' || true
+          # Does a renamed copy of sleep still run?
+          tmp="$(mktemp -d)"
+          cp "$(readlink -f "$sleep_path")" "$tmp/etherdog-bin"
+          cp "$(readlink -f "$sleep_path")" "$tmp/sleep"
+          "$tmp/etherdog-bin" 0 && echo "renamed copy: OK" || echo "renamed copy: FAILED ($?)"
+          "$tmp/sleep" 0 && echo "copy named sleep: OK" || echo "copy named sleep: FAILED ($?)"
+          rm -rf "$tmp"
 
       - name: Install test dependencies
         run: |
