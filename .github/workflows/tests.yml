@@ -52,7 +52,8 @@ jobs:
 
   webserver:
     name: Webserver (pytest, Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    # Temporary: ubuntu-latest (26.04) ships uutils coreutils; checking the suite on GNU coreutils.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
